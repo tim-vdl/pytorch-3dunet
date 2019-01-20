@@ -33,21 +33,21 @@ def _eval_criterion(criterion, batch_shape, n_times=100):
 
 class TestCriterion:
     def test_dice_coefficient(self):
-        results = _compute_criterion(DiceCoefficient())
+        results = _compute_criterion(DiceCoefficient(out_channels=2))
         # check that all of the coefficients belong to [0, 1]
         results = np.array(results)
         assert np.all(results > 0)
         assert np.all(results < 1)
 
     def test_generalized_dice_loss(self):
-        results = _compute_criterion(GeneralizedDiceLoss())
+        results = _compute_criterion(GeneralizedDiceLoss(out_channels=2))
         # check that all of the coefficients belong to [0, 1]
         results = np.array(results)
         assert np.all(results > 0)
         assert np.all(results < 1)
 
     def test_dice_loss(self):
-        results = _compute_criterion(DiceLoss())
+        results = _compute_criterion(DiceLoss(out_channels=2))
         # check that all of the coefficients belong to [0, 1]
         results = np.array(results)
         assert np.all(results > 0)
@@ -60,7 +60,7 @@ class TestCriterion:
             batch_shape = list(shape)
             batch_shape[1] = C
             batch_shape = tuple(batch_shape)
-            results = results + _eval_criterion(GeneralizedDiceLoss(weight=torch.rand(C)), batch_shape)
+            results = results + _eval_criterion(GeneralizedDiceLoss(out_channels=2, weight=torch.rand(C)), batch_shape)
 
         # check that all of the coefficients belong to [0, 1]
         results = np.array(results)
@@ -106,7 +106,7 @@ class TestCriterion:
         assert output.item() == 0
 
     def test_ignore_index_loss_with_dice_coeff(self):
-        loss = DiceCoefficient(ignore_index=-1)
+        loss = DiceCoefficient(out_channels=2, ignore_index=-1)
         input = torch.zeros((3, 3))
         input[1, 1] = 1.
         target = -1. * torch.ones((3, 3))

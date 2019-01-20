@@ -6,12 +6,25 @@ from torch.autograd import Variable
 SUPPORTED_LOSSES = ['ce', 'bce', 'wce', 'pce', 'dice', 'gdl']
 
 
-def compute_per_channel_dice(input, target, epsilon=1e-5, ignore_index=None, weight=None):
+def compute_per_channel_dice(input, target, out_channels, epsilon=1e-5, ignore_index=None, weight=None,
+                             ignore_channel=None):
     # assumes that input is a normalized probability
+
+    # given ignore_channel increase the number of out_channels by 1 for computation of the one-hot tensor
+    if ignore_channel is not None:
+        out_channels = out_channels + 1
 
     # input and target shapes must match
     if target.dim() == 4:
-        target = expand_as_one_hot(target, C=input.size()[1], ignore_index=ignore_index)
+        target = expand_as_one_hot(target, C=out_channels, ignore_index=ignore_index)
+
+    if ignore_channel is not None:
+        if ignore_channel == 0:
+            target = target[:, 1:, ...]
+        elif ignore_channel == out_channels - 1:
+            target = target[:, :-1, ...]
+        else:
+            target = torch.cat((target[:, 0:ignore_channel, ...], target[:, ignore_channel + 1:, ...]), dim=1)
 
     assert input.size() == target.size(), "'input' and 'target' must have the same shape"
 
@@ -43,13 +56,16 @@ class DiceCoefficient:
     Input is expected to be probabilities instead of logits.
     """
 
-    def __init__(self, epsilon=1e-5, ignore_index=None):
+    def __init__(self, out_channels, epsilon=1e-5, ignore_index=None, ignore_channel=None):
+        self.out_channels = out_channels
         self.epsilon = epsilon
         self.ignore_index = ignore_index
+        self.ignore_channel = ignore_channel
 
     def __call__(self, input, target):
         # Average across channels in order to get the final score
-        return torch.mean(compute_per_channel_dice(input, target, epsilon=self.epsilon, ignore_index=self.ignore_index))
+        return torch.mean(compute_per_channel_dice(input, target, self.out_channels, epsilon=self.epsilon,
+                                                   ignore_index=self.ignore_index, ignore_channel=self.ignore_channel))
 
 
 class DiceLoss(nn.Module):
@@ -57,11 +73,14 @@ class DiceLoss(nn.Module):
     Additionally allows per-class weights to be provided.
     """
 
-    def __init__(self, epsilon=1e-5, weight=None, ignore_index=None, sigmoid_normalization=True):
+    def __init__(self, out_channels, epsilon=1e-5, weight=None, ignore_index=None, ignore_channel=None,
+                 sigmoid_normalization=True):
         super(DiceLoss, self).__init__()
+        self.out_channels = out_channels
         self.epsilon = epsilon
         self.register_buffer('weight', weight)
         self.ignore_index = ignore_index
+        self.ignore_channel = ignore_channel
         # The output from the network during training is assumed to be un-normalized probabilities and we would
         # like to normalize the logits. Since Dice (or soft Dice in this case) is usually used for binary data,
         # normalizing the channels with Sigmoid is the default choice even for multi-class segmentation problems.
@@ -80,7 +99,8 @@ class DiceLoss(nn.Module):
         else:
             weight = None
 
-        per_channel_dice = compute_per_channel_dice(input, target, epsilon=self.epsilon, ignore_index=self.ignore_index,
+        per_channel_dice = compute_per_channel_dice(input, target, out_channels=self.out_channels, epsilon=self.epsilon,
+                                                    ignore_index=self.ignore_index, ignore_channel=self.ignore_channel,
                                                     weight=weight)
         # Average the Dice score across all channels/classes
         return torch.mean(1. - per_channel_dice)
@@ -90,11 +110,14 @@ class GeneralizedDiceLoss(nn.Module):
     """Computes Generalized Dice Loss (GDL) as described in https://arxiv.org/pdf/1707.03237.pdf
     """
 
-    def __init__(self, epsilon=1e-5, weight=None, ignore_index=None, sigmoid_normalization=True):
+    def __init__(self, out_channels, epsilon=1e-5, weight=None, ignore_index=None, ignore_channel=None,
+                 sigmoid_normalization=True):
         super(GeneralizedDiceLoss, self).__init__()
+        self.out_channels = out_channels
         self.epsilon = epsilon
         self.register_buffer('weight', weight)
         self.ignore_index = ignore_index
+        self.ignore_channel = ignore_channel
         if sigmoid_normalization:
             self.normalization = nn.Sigmoid()
         else:
@@ -105,7 +128,16 @@ class GeneralizedDiceLoss(nn.Module):
         input = self.normalization(input)
         # input and target shapes must match
         if target.dim() == 4:
-            target = expand_as_one_hot(target, C=input.size()[1], ignore_index=self.ignore_index)
+            target = expand_as_one_hot(target, C=self.out_channels, ignore_index=self.ignore_index)
+
+        if self.ignore_channel is not None:
+            if self.ignore_channel == 0:
+                target = target[:, 1:, ...]
+            elif self.ignore_channel == self.out_channels - 1:
+                target = target[:, :-1, ...]
+            else:
+                target = torch.cat((target[:, 0:self.ignore_channel, ...], target[:, self.ignore_channel + 1:, ...]),
+                                   dim=1)
 
         assert input.size() == target.size(), "'input' and 'target' must have the same shape"
 
@@ -276,17 +308,20 @@ def expand_as_one_hot(input, C, ignore_index=None):
         return torch.zeros(shape).to(input.device).scatter_(1, src, 1)
 
 
-def get_loss_criterion(loss_str, weight=None, ignore_index=None):
+def get_loss_criterion(loss_str, out_channels, weight=None, ignore_index=None, ignore_channel=None):
     """
     Returns the loss function based on the loss_str.
     :param loss_str: specifies the loss function to be used
-    :param final_sigmoid: used only with Dice-based losses. If True the Sigmoid normalization will be applied
-        before computing the loss otherwise it will use the Softmax.
+    :param out_channels: number of channels in the network output
     :param weight: a manual rescaling weight given to each class
     :param ignore_index: specifies a target value that is ignored and does not contribute to the input gradient
+    :param ignore_channel: channel in the target to be ignored during training (used only with Dice losses)
     :return: an instance of the loss function
     """
     assert loss_str in SUPPORTED_LOSSES, f'Invalid loss string: {loss_str}'
+
+    if ignore_channel is not None:
+        assert loss_str in ['dice', 'gdl']
 
     if loss_str == 'bce':
         if ignore_index is None:
@@ -304,6 +339,8 @@ def get_loss_criterion(loss_str, weight=None, ignore_index=None):
     elif loss_str == 'pce':
         return PixelWiseCrossEntropyLoss(class_weights=weight, ignore_index=ignore_index)
     elif loss_str == 'gdl':
-        return GeneralizedDiceLoss(weight=weight, ignore_index=ignore_index)
+        return GeneralizedDiceLoss(out_channels=out_channels, weight=weight, ignore_index=ignore_index,
+                                   ignore_channel=ignore_channel)
     else:
-        return DiceLoss(weight=weight, ignore_index=ignore_index)
+        return DiceLoss(out_channels=out_channels, weight=weight, ignore_index=ignore_index,
+                        ignore_channel=ignore_channel)

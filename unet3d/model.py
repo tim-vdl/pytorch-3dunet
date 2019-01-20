@@ -93,6 +93,10 @@ class UNet3D(nn.Module):
 
         return x
 
+    @property
+    def out_channels(self):
+        return self.final_conv.out_channels
+
 
 class DoubleConv(nn.Sequential):
     """

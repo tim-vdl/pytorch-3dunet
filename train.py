@@ -32,6 +32,8 @@ def _arg_parser():
                         help='A manual rescaling weight given to each class. Can be used with CrossEntropy or BCELoss. E.g. --loss-weight 0.3 0.3 0.4')
     parser.add_argument('--ignore-index', type=int, default=None,
                         help='Specifies a target value that is ignored and does not contribute to the input gradient')
+    parser.add_argument('--ignore-channel', type=int, default=None,
+                        help='Specifies a target class to be ignored by during training (relevant only for Dice-based losses)')
     parser.add_argument('--curriculum',
                         help='use simple Curriculum Learning scheme if ignore_index is present',
                         action='store_true')
@@ -54,8 +56,10 @@ def _arg_parser():
                         help='how many iterations between tensorboard logging (default: 100)')
     parser.add_argument('--resume', type=str,
                         help='path to latest checkpoint (default: none); if provided the training will be resumed from that checkpoint')
-    parser.add_argument('--train-path', type=str, nargs='+', required=True, help='paths to the training datasets, e.g. --train-path <path1> <path2>')
-    parser.add_argument('--val-path', type=str, nargs='+', required=True, help='paths to the validation datasets, e.g. --val-path <path1> <path2>')
+    parser.add_argument('--train-path', type=str, nargs='+', required=True,
+                        help='paths to the training datasets, e.g. --train-path <path1> <path2>')
+    parser.add_argument('--val-path', type=str, nargs='+', required=True,
+                        help='paths to the validation datasets, e.g. --val-path <path1> <path2>')
     parser.add_argument('--train-patch', required=True, type=int, nargs='+', default=None,
                         help='Patch shape for used for training')
     parser.add_argument('--train-stride', required=True, type=int, nargs='+', default=None,
@@ -90,12 +94,11 @@ def main():
 
     # Create loss criterion
     if args.loss_weight is not None:
+        assert len(args.loss_weight) == args.out_channels, "Loss weight must correspond to the number of channels"
         loss_weight = torch.tensor(args.loss_weight)
         loss_weight = loss_weight.to(device)
     else:
         loss_weight = None
-
-    loss_criterion = get_loss_criterion(args.loss, loss_weight, args.ignore_index)
 
     model = UNet3D(args.in_channels, args.out_channels,
                    init_channel_number=args.init_channel_number,
@@ -105,11 +108,15 @@ def main():
 
     model = model.to(device)
 
+    loss_criterion = get_loss_criterion(loss_str=args.loss, out_channels=model.out_channels, weight=loss_weight,
+                                        ignore_index=args.ignore_index, ignore_channel=args.ignore_channel)
+
     # Log the number of learnable parameters
     logger.info(f'Number of learnable params {get_number_of_learnable_parameters(model)}')
 
     # Create accuracy metric
-    accuracy_criterion = DiceCoefficient(ignore_index=args.ignore_index)
+    accuracy_criterion = DiceCoefficient(out_channels=model.out_channels, ignore_index=args.ignore_index,
+                                         ignore_channel=args.ignore_channel)
 
     # Get data loaders. If 'bce' or 'dice' loss is used, convert labels to float
     train_path, val_path = args.train_path, args.val_path
