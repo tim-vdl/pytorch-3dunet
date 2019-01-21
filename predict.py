@@ -114,6 +114,8 @@ def main():
     parser.add_argument('--final-sigmoid',
                         action='store_true',
                         help='if True apply element-wise nn.Sigmoid after the last layer otherwise apply nn.Softmax')
+    parser.add_argument('--average-channels', action='store_true',
+                        help='if True average the network prediction across the channel axis; makes sense only if the same semantic class is stored within different channels')
     parser.add_argument('--test-path', type=str, required=True, help='path to the test dataset')
     parser.add_argument('--raw-internal-path', type=str, default='raw')
     parser.add_argument('--patch', required=True, type=int, nargs='+', default=None,
@@ -158,7 +160,7 @@ def main():
     output_file = f'{os.path.splitext(args.test_path)[0]}_probabilities.h5'
 
     # average channels only in case of final_sigmoid
-    save_predictions(probability_maps, output_file, final_sigmoid)
+    save_predictions(probability_maps, output_file, args.average_channels)
 
 
 if __name__ == '__main__':
