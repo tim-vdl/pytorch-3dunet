@@ -261,6 +261,7 @@ class BCEWithMSE(nn.Module):
         self.skip_last_target = skip_last_target
         self.bce = nn.BCEWithLogitsLoss()
         self.mse = MSELoss()
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, input, target):
         if self.skip_last_target:
@@ -268,6 +269,8 @@ class BCEWithMSE(nn.Module):
 
         bce_input = input[:, :-1, ...]
         mse_input = input[:, -1, ...]
+        # apply ReLU before MSE loss
+        mse_input = self.relu(mse_input)
 
         bce_target = target[:, :-1, ...]
         mse_target = target[:, -1, ...]
