@@ -248,6 +248,33 @@ class TagsAngularLoss(nn.Module):
         return loss
 
 
+class BCEWithMSE(nn.Module):
+    """
+    Combines the BCEwithLogitsLoss with MSELoss so that the network can improve from learning auxiliary task
+    (e.g. denoising with MSE). Assumes that the MSE target is in the last channel and the final loss is a linear
+    combination of the BCE and MSE, i.e. L = BCE + alpha * MSE
+    """
+
+    def __init__(self, alpha=1, skip_last_target=False):
+        super(BCEWithMSE, self).__init__()
+        self.alpha = alpha
+        self.skip_last_target = skip_last_target
+        self.bce = nn.BCEWithLogitsLoss()
+        self.mse = MSELoss()
+
+    def forward(self, input, target):
+        if self.skip_last_target:
+            target = target[:, :-1, ...]
+
+        bce_input = input[:, :-1, ...]
+        mse_input = input[:, -1, ...]
+
+        bce_target = target[:, :-1, ...]
+        mse_target = target[:, -1, ...]
+
+        return self.bce(bce_input, bce_target) + self.alpha * self.mse(mse_input, mse_target)
+
+
 def square_angular_loss(input, target, weights=None):
     """
     Computes square angular loss between input and target directions.
@@ -323,7 +350,7 @@ def expand_as_one_hot(input, C, ignore_index=None):
 
 SUPPORTED_LOSSES = ['BCEWithLogitsLoss', 'CrossEntropyLoss', 'WeightedCrossEntropyLoss', 'PixelWiseCrossEntropyLoss',
                     'GeneralizedDiceLoss', 'DiceLoss', 'TagsAngularLoss', 'MSEWithLogitsLoss', 'MSELoss',
-                    'SmoothL1Loss', 'L1Loss']
+                    'SmoothL1Loss', 'L1Loss', 'BCEWithMSE']
 
 
 def get_loss_criterion(config):
@@ -377,5 +404,9 @@ def get_loss_criterion(config):
         return SmoothL1Loss()
     elif name == 'L1Loss':
         return L1Loss()
+    elif name == 'BCEWithMSE':
+        skip_last_target = loss_config.get('skip_last_target', False)
+        alpha = loss_config.get('alpha', 1)
+        return BCEWithMSE(alpha=alpha, skip_last_target=skip_last_target)
     else:
         raise RuntimeError(f"Unsupported loss function: '{name}'. Supported losses: {SUPPORTED_LOSSES}")

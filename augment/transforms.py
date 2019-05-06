@@ -311,6 +311,7 @@ class LabelToBoundaryAndAffinities:
     Combines the StandardLabelToBoundary and LabelToAffinities in the hope
     that that training the network to predict both would improve the main task: boundary prediction.
     """
+
     def __init__(self, xy_offsets, z_offsets, append_label=False, blur=False, sigma=1, **kwargs):
         self.l2b = StandardLabelToBoundary(blur=blur, sigma=sigma)
         self.l2a = LabelToAffinities(offsets=xy_offsets, z_offsets=z_offsets, append_label=append_label)
@@ -319,6 +320,53 @@ class LabelToBoundaryAndAffinities:
         boundary = self.l2b(m)
         affinities = self.l2a(m)
         return np.concatenate((boundary, affinities), axis=0)
+
+
+class LabelToBoundaryAffinitiesAndNoise:
+    """
+    Combines the StandardLabelToBoundary, LabelToAffinities and GaussianNoise in the hope
+    that that training the network with auxiliary tasks (affinities and denoising)
+    would improve the main task: boundary prediction.
+    """
+
+    def __init__(self, random_state, xy_offsets, z_offsets, append_label=False, l2b_blur=False, l2b_sigma=1,
+                 noise_max_sigma=1, noise_max_value=None, **kwargs):
+        self.l2b = StandardLabelToBoundary(blur=l2b_blur, sigma=l2b_sigma)
+        self.l2a = LabelToAffinities(offsets=xy_offsets, z_offsets=z_offsets, append_label=False)
+        # the input image will be normalized (how)
+        self.g_noise = GaussianNoise(random_state, max_sigma=noise_max_sigma, max_value=noise_max_value)
+        self.append_label = append_label
+
+    def __call__(self, m):
+        boundary = self.l2b(m)
+        affinities = self.l2a(m)
+        noise = self.g_noise(boundary)
+        if self.append_label:
+            return np.concatenate((boundary, affinities, noise, np.expand_dims(m, axis=0)), axis=0)
+        return np.concatenate((boundary, affinities, noise), axis=0)
+
+
+class LabelToBoundaryAndNoise:
+    """
+    Combines the StandardLabelToBoundary and Gaussian and in the hope
+    that that training the network with auxiliary tasks (affinities and denoising)
+    would improve the main task: boundary prediction.
+    """
+
+    def __init__(self, random_state, append_label=False, l2b_blur=False, l2b_sigma=1,
+                 noise_max_sigma=1, noise_max_value=None, **kwargs):
+        self.l2b = StandardLabelToBoundary(blur=l2b_blur, sigma=l2b_sigma)
+        # the input image will be normalized (how)
+        self.g_noise = GaussianNoise(random_state, max_sigma=noise_max_sigma, max_value=noise_max_value)
+        self.append_label = append_label
+
+    def __call__(self, m):
+        boundary = self.l2b(m)
+        noise = self.g_noise(boundary)
+
+        if self.append_label:
+            return np.concatenate((boundary, noise, np.expand_dims(m, axis=0)), axis=0)
+        return np.concatenate((boundary, noise), axis=0)
 
 
 class Normalize:
@@ -345,16 +393,18 @@ class RangeNormalize:
 
 
 class GaussianNoise:
-    def __init__(self, random_state, max_sigma, max_value=255, **kwargs):
+    def __init__(self, random_state, max_sigma, max_value=None, **kwargs):
         self.random_state = random_state
         self.max_sigma = max_sigma
         self.max_value = max_value
 
     def __call__(self, m):
         # pick std dev from [0; max_sigma]
-        std = self.random_state.randint(self.max_sigma)
+        std = self.random_state.uniform() * self.max_sigma
         gaussian_noise = self.random_state.normal(0, std, m.shape)
         noisy_m = m + gaussian_noise
+        if self.max_value is None:
+            return noisy_m
         return np.clip(noisy_m, 0, self.max_value).astype(m.dtype)
 
 
