@@ -8,7 +8,10 @@ __pycache__/
 *$py.class
 
 # Tensorboard logs
-logs/
+3dunet/logs/
 
 # PyTorch models
 *.pytorch
+
+# data files
+data/
