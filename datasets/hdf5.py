@@ -1,6 +1,7 @@
 import collections
 import importlib
 
+import os
 import h5py
 import numpy as np
 import torch
@@ -355,6 +356,15 @@ def _get_slice_builder_cls(class_name):
     return clazz
 
 
+def get_h5_files(path):
+    files = []
+    # r=root, d=directories, f = files
+    for r, _, f in os.walk(path):
+        for file in f:
+            if '.h5' in file:
+                files.append(os.path.join(r, file))
+    return files
+
 def get_train_loaders(config):
     """
     Returns dictionary containing the training and validation loaders
@@ -372,10 +382,18 @@ def get_train_loaders(config):
     logger.info('Creating training and validation set loaders...')
 
     # get train and validation files
-    train_paths = loaders_config['train_path']
-    val_paths = loaders_config['val_path']
-    assert isinstance(train_paths, list)
-    assert isinstance(val_paths, list)
+    train_paths  = loaders_config['train_path']
+    val_paths    = loaders_config['val_path']
+    assert isinstance(train_paths, str) or isinstance(train_paths, list)
+    assert isinstance(val_paths, str) or isinstance(val_paths, list)
+    if  isinstance(train_paths, str):
+        train_paths = get_h5_files(train_paths)
+    if isinstance(val_paths, str):
+        val_paths   = get_h5_files(val_paths)
+
+    print(f'Train paths:{train_paths}')
+    print(f'Val paths {val_paths}')
+
     # get h5 internal paths for raw and label
     raw_internal_path = loaders_config['raw_internal_path']
     label_internal_path = loaders_config['label_internal_path']

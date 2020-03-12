@@ -70,19 +70,9 @@ loaders:
   # path to the the label data withtin the H5
   label_internal_path: label
   # paths to the training datasets
-  train_path:
-    - 'data/h5_3D/bad_01_10_15_17.h5'
-    - 'data/h5_3D/bad_03_10_19_45.h5'
-    - 'data/h5_3D/bad_04_10_21_42.h5'
-    - 'data/h5_3D/good_01_12_32_10.h5'
-    - 'data/h5_3D/good_02_12_34_18.h5'
-    - 'data/h5_3D/good_05_12_40_30.h5'
+  train_path: data/h5/train
   # paths to the validation datasets
-  val_path:
-    - 'data/h5_3D/bad_05_10_23_41.h5'
-    - 'data/h5_3D/bad_13_10_40_16.h5'
-    - 'data/h5_3D/good_06_12_42_42.h5'
-    - 'data/h5_3D/good_07_12_45_11.h5'
+  val_path: data/h5/val
   # how many subprocesses to use for data loading
   num_workers: 0
   # data transformations/augmentations
