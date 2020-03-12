@@ -208,6 +208,7 @@ class UNet3DTrainer:
 
                 # compute eval criterion
                 if not self.skip_train_validation:
+                    target = target.to(dtype=torch.long)
                     eval_score = self.eval_criterion(output, target)
                     train_eval_scores.update(eval_score.item(), self._batch_size(input))
 
@@ -238,7 +239,7 @@ class UNet3DTrainer:
                 self.logger.info(f'Validation iteration {i}')
 
                 input, target, weight = self._split_training_batch(t)
-
+                target = target.to(dtype=torch.long)
                 output, loss = self._forward_pass(input, target, weight)
                 val_losses.update(loss.item(), self._batch_size(input))
 
@@ -276,6 +277,9 @@ class UNet3DTrainer:
     def _forward_pass(self, input, target, weight=None):
         # forward pass
         output = self.model(input)
+        target = target.to(dtype=torch.long)
+        # print(f'Model output dtype: {output.type()}')
+        # print(f'Target dtype: {target.type()}')
 
         # compute the loss
         if weight is None:

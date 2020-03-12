@@ -7,7 +7,7 @@ model:
   # number of input channels to the model
   in_channels: 1
   # number of output channels
-  out_channels: 2
+  out_channels: 5
   # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
   layer_order: gcr
   # feature maps scale factor
@@ -23,11 +23,11 @@ trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
-  validate_after_iters: 20
+  validate_after_iters: 500
   # how many iterations between tensorboard logging
-  log_after_iters: 20
+  log_after_iters: 100
   # max number of epochs
-  epochs: 50
+  epochs: 25
   # max number of iterations
   iters: 100000
   # model with higher eval score is considered better
@@ -35,7 +35,7 @@ trainer:
 # optimizer configuration
 optimizer:
   # initial learning rate
-  learning_rate: 0.0002
+  learning_rate: 0.00002
   # weight decay
   weight_decay: 0.0001
 # loss function configuration
@@ -43,7 +43,7 @@ loss:
   # loss function to be used during training
   name: CrossEntropyLoss
   # A manual rescaling weight given to each class.
-  weight: null
+  weight: [0.093899, 0.9297985, 0.99983957, 0.99984833, 0.97661461]
   # a target value that is ignored and does not contribute to the input gradient
   ignore_index: null
 # evaluation metric configuration
@@ -58,33 +58,33 @@ lr_scheduler:
 # data loaders configuration
 loaders:
   # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-  train_patch: [32, 64, 64]
+  train_patch: [64, 64, 64]
   # train stride between patches
-  train_stride: [8, 16, 16]
+  train_stride: [32, 32, 32]
   # validation patch (can be bigger than train patch since there is no backprop)
-  val_patch: [32, 64, 64]
+  val_patch: [64, 64, 64]
   # validation stride (validation patches doesn't need to overlap)
-  val_stride: [32, 64, 64]
+  val_stride: [64, 64, 64]
   # path to the raw data within the H5
   raw_internal_path: raw
   # path to the the label data withtin the H5
   label_internal_path: label
   # paths to the training datasets
   train_path:
-    - 'data/h5/bad_01_10_15_17.h5'
-    - 'data/h5/bad_03_10_19_45.h5'
-    - 'data/h5/bad_04_10_21_42.h5'
-    - 'data/h5/good_01_12_32_10.h5'
-    - 'data/h5/good_02_12_34_18.h5'
-    - 'data/h5/good_05_12_40_30.h5'
+    - 'data/h5_3D/bad_01_10_15_17.h5'
+    - 'data/h5_3D/bad_03_10_19_45.h5'
+    - 'data/h5_3D/bad_04_10_21_42.h5'
+    - 'data/h5_3D/good_01_12_32_10.h5'
+    - 'data/h5_3D/good_02_12_34_18.h5'
+    - 'data/h5_3D/good_05_12_40_30.h5'
   # paths to the validation datasets
   val_path:
-    - 'data/h5/bad_05_10_23_41.h5'
-    - 'data/h5/bad_13_10_40_16.h5'
-    - 'data/h5/good_06_12_42_42.h5'
-    - 'data/h5/good_07_12_45_11.h5'
+    - 'data/h5_3D/bad_05_10_23_41.h5'
+    - 'data/h5_3D/bad_13_10_40_16.h5'
+    - 'data/h5_3D/good_06_12_42_42.h5'
+    - 'data/h5_3D/good_07_12_45_11.h5'
   # how many subprocesses to use for data loading
-  num_workers: 1
+  num_workers: 0
   # data transformations/augmentations
   transformer:
     train:
@@ -97,11 +97,6 @@ loaders:
           axes: [[2, 1]]
           angle_spectrum: 15
           mode: reflect
-        - name: ElasticDeformation
-          spline_order: 3
-        - name: RandomContrast
-        - name: AdditiveGaussianNoise
-        - name: AdditivePoissonNoise
         - name: ToTensor
           expand_dims: true
       label:
@@ -112,8 +107,6 @@ loaders:
           axes: [[2, 1]]
           angle_spectrum: 15
           mode: reflect
-        - name: ElasticDeformation
-          spline_order: 0
         - name: ToTensor
           expand_dims: false
           dtype: 'long'
