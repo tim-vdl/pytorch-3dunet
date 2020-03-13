@@ -30,7 +30,7 @@ def main(args):
         raw     = np.array(nib.load(raw_path).dataobj).astype('double')
         raw     = raw / raw.max() # values in range [0, 1]
         label   = np.array(nib.load(label_path).dataobj).astype('double') - 1
-        label[label==-1] = -100 # ignore voxels with value == -1
+        label[label < 0] = 0 # set voxels with negative value == 0
 
         present_labels = np.unique(label)
         print(f'Raw array size: {raw.shape}')
