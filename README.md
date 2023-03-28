@@ -6,17 +6,31 @@
 
 # pytorch-3dunet
 
-PyTorch implementation 3D U-Net and its variants:
+PyTorch implementation of 3D U-Net and its variants:
 
-- Standard 3D U-Net based on [3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation](https://arxiv.org/abs/1606.06650) 
-Özgün Çiçek et al.
+- `UNet3D` Standard 3D U-Net based on [3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation](https://arxiv.org/abs/1606.06650)
 
-- Residual 3D U-Net based on [Superhuman Accuracy on the SNEMI3D Connectomics Challenge](https://arxiv.org/pdf/1706.00120.pdf) Kisuk Lee et al.
+- `ResidualUNet3D` Residual 3D U-Net based on [Superhuman Accuracy on the SNEMI3D Connectomics Challenge](https://arxiv.org/pdf/1706.00120.pdf)
+
+- `ResidualUNetSE3D` Similar to `ResidualUNet3D` with the addition of Squeeze and Excitation blocks based on [Deep Learning Semantic Segmentation for High-Resolution Medical Volumes](https://ieeexplore.ieee.org/abstract/document/9425041). Original squeeze and excite paper: [Squeeze-and-Excitation Networks](https://arxiv.org/pdf/1709.01507.pdf)
 
 The code allows for training the U-Net for both: **semantic segmentation** (binary and multi-class) and **regression** problems (e.g. de-noising, learning deconvolutions).
 
 ## 2D U-Net
-Training the standard 2D U-Net is also possible, see [2DUnet_dsb2018](resources/2DUnet_dsb2018/train_config.yml) for example configuration. Just make sure to keep the singleton z-dimension in your H5 dataset (i.e. `(1, Y, X)` instead of `(Y, X)`) , because data loading / data augmentation requires tensors of rank 3 always.
+2D U-Net is also supported, see [2DUnet_confocal](resources/2DUnet_confocal_boundary) or [2DUnet_dsb2018](resources/2DUnet_dsb2018/train_config.yml) for example configuration. 
+Just make sure to keep the singleton z-dimension in your H5 dataset (i.e. `(1, Y, X)` instead of `(Y, X)`) , because data loading / data augmentation requires tensors of rank 3.
+The 2D U-Net itself uses the standard 2D convolutional layers instead of 3D convolutional with kernel size `(1, 3, 3)` for performance reasons.
+
+## Input Data Format
+The input data should be stored in HDF5 files. The HDF5 files for training should contain two datasets: `raw` and `label` (and optionally `weights` dataset). 
+The `raw` dataset should contain the input data, while the `label` dataset should contain the ground truth labels (optional `weights` dataset should contain the values for weighting the loss function in different regions of the input). 
+The format of the `raw` and `label` datasets depends on whether the problem is 2D or 3D and whether the data is single-channel or multi-channel, see the table below:
+
+|                | 2D           | 3D           |
+|----------------|--------------|--------------|
+| single-channel | (1, Y, X)    | (Z, Y, X)    |
+| multi-channel  | (C, 1, Y, X) | (C, Z, Y, X) |
+
 
 ## Prerequisites
 - Linux
@@ -27,51 +41,10 @@ Training the standard 2D U-Net is also possible, see [2DUnet_dsb2018](resources/
 The package has not been tested on Windows, however some users reported using it successfully on Windows.
 
 
-## Supported Loss Functions
-
-### Semantic Segmentation
-- _BCEWithLogitsLoss_ (binary cross-entropy)
-- _DiceLoss_ (standard `DiceLoss` defined as `1 - DiceCoefficient` used for binary semantic segmentation; when more than 2 classes are present in the ground truth, it computes the `DiceLoss` per channel and averages the values)
-- _BCEDiceLoss_ (Linear combination of BCE and Dice losses, i.e. `alpha * BCE + beta * Dice`, `alpha, beta` can be specified in the `loss` section of the config)
-- _CrossEntropyLoss_ (one can specify class weights via the `weight: [w_1, ..., w_k]` in the `loss` section of the config)
-- _PixelWiseCrossEntropyLoss_ (one can specify per pixel weights in order to give more gradient to the important/under-represented regions in the ground truth)
-- _WeightedCrossEntropyLoss_ (see 'Weighted cross-entropy (WCE)' in the below paper for a detailed explanation)
-- _GeneralizedDiceLoss_ (see 'Generalized Dice Loss (GDL)' in the below paper for a detailed explanation) Note: use this loss function only if the labels in the training dataset are very imbalanced e.g. one class having at least 3 orders of magnitude more voxels than the others. Otherwise use standard _DiceLoss_.
-
-For a detailed explanation of some of the supported loss functions see:
-[Generalised Dice overlap as a deep learning loss function for highly unbalanced segmentations](https://arxiv.org/pdf/1707.03237.pdf)
-Carole H. Sudre et al.
-
-### Regression
-- _MSELoss_ (mean squared error loss)
-- _L1Loss_ (mean absolute errro loss)
-- _SmoothL1Loss_ (less sensitive to outliers than MSELoss)
-- _WeightedSmoothL1Loss_ (extension of the _SmoothL1Loss_ which allows to weight the voxel values above/below a given threshold differently)
-
-
-## Supported Evaluation Metrics
-
-### Semantic Segmentation
-- _MeanIoU_ (mean intersection over union)
-- _DiceCoefficient_ (computes per channel Dice Coefficient and returns the average)
-If a 3D U-Net was trained to predict cell boundaries, one can use the following semantic instance segmentation metrics
-(the metrics below are computed by running connected components on thresholded boundary map and comparing the resulted instances to the ground truth instance segmentation): 
-- _BoundaryAveragePrecision_ (Average Precision applied to the boundary probability maps: thresholds the output from the network, runs connected components to get the segmentation and computes AP between the resulting segmentation and the ground truth)
-- _AdaptedRandError_ (see http://brainiac2.mit.edu/SNEMI3D/evaluation for a detailed explanation)
-- _AveragePrecision_ (see https://www.kaggle.com/stkbailey/step-by-step-explanation-of-scoring-metric)
-
-If not specified `MeanIoU` will be used by default.
-
-
-### Regression
-- _PSNR_ (peak signal to noise ratio)
-- _MSE_ (mean squared error)
-
-
 ## Installation
 - The easiest way to install `pytorch-3dunet` package is via conda:
 ```
-conda create -n pytorch3dunet -c pytorch -c conda-forge -c awolny pytorch-3dunet
+conda create -n pytorch3dunet --c pytorch -c nvidia -c conda-forge -c awolny pytorch-3dunet
 conda activate pytorch3dunet
 ```
 After installation the following commands are accessible within the conda environment:
@@ -83,10 +56,7 @@ python setup.py install
 ```
 
 ### Installation tips
-Make sure that the installed `pytorch` is compatible with your CUDA version, otherwise the training/prediction will fail to run on GPU. You can re-install `pytorch` compatible with your CUDA in the `pytorch3dunet` environment by:
-```
-conda install -c pytorch cudatoolkit=<YOU_CUDA_VERSION> pytorch
-```
+Make sure that the installed `pytorch` is compatible with your CUDA version, otherwise the training/prediction will fail to run on GPU. 
 
 ## Train
 Given that `pytorch-3dunet` package was installed via conda as described above, one can train the network by simply invoking:
@@ -109,8 +79,8 @@ One can monitor the training progress with Tensorboard `tensorboard --logdir <ch
 The target data has to be 4D (one target binary mask per channel).
 When training with `WeightedCrossEntropyLoss`, `CrossEntropyLoss`, `PixelWiseCrossEntropyLoss` the target dataset has to be 3D, see also pytorch documentation for CE loss: https://pytorch.org/docs/master/generated/torch.nn.CrossEntropyLoss.html
 2. `final_sigmoid` in the `model` config section applies only to the inference time (validation, test):
-When training with cross entropy based losses (`WeightedCrossEntropyLoss`, `CrossEntropyLoss`, `PixelWiseCrossEntropyLoss`) set `final_sigmoid=False` so that `Softmax` normalization is applied to the output.
-When training with `BCEWithLogitsLoss`, `DiceLoss`, `BCEDiceLoss`, `GeneralizedDiceLoss` set `final_sigmoid=True`
+   * When training with `BCEWithLogitsLoss`, `DiceLoss`, `BCEDiceLoss`, `GeneralizedDiceLoss` set `final_sigmoid=True`
+   * When training with cross entropy based losses (`WeightedCrossEntropyLoss`, `CrossEntropyLoss`, `PixelWiseCrossEntropyLoss`) set `final_sigmoid=False` so that `Softmax` normalization is applied to the output.
 
 ## Prediction
 Given that `pytorch-3dunet` package was installed via conda as described above, one can run the prediction via:
@@ -133,6 +103,46 @@ or
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 predict3dunet --config <CONFIG>
 ```
+
+## Supported Loss Functions
+
+### Semantic Segmentation
+- `BCEWithLogitsLoss` (binary cross-entropy)
+- `DiceLoss` (standard `DiceLoss` defined as `1 - DiceCoefficient` used for binary semantic segmentation; when more than 2 classes are present in the ground truth, it computes the `DiceLoss` per channel and averages the values)
+- `BCEDiceLoss` (Linear combination of BCE and Dice losses, i.e. `alpha * BCE + beta * Dice`, `alpha, beta` can be specified in the `loss` section of the config)
+- `CrossEntropyLoss` (one can specify class weights via the `weight: [w_1, ..., w_k]` in the `loss` section of the config)
+- `PixelWiseCrossEntropyLoss` (one can specify per pixel weights in order to give more gradient to the important/under-represented regions in the ground truth)
+- `WeightedCrossEntropyLoss` (see 'Weighted cross-entropy (WCE)' in the below paper for a detailed explanation)
+- `GeneralizedDiceLoss` (see 'Generalized Dice Loss (GDL)' in the below paper for a detailed explanation) Note: use this loss function only if the labels in the training dataset are very imbalanced e.g. one class having at least 3 orders of magnitude more voxels than the others. Otherwise use standard `DiceLoss`.
+
+For a detailed explanation of some of the supported loss functions see:
+[Generalised Dice overlap as a deep learning loss function for highly unbalanced segmentations](https://arxiv.org/pdf/1707.03237.pdf)
+Carole H. Sudre et al.
+
+### Regression
+- `MSELoss` (mean squared error loss)
+- `L1Loss` (mean absolute errro loss)
+- `SmoothL1Loss` (less sensitive to outliers than MSELoss)
+- `WeightedSmoothL1Loss` (extension of the `SmoothL1Loss` which allows to weight the voxel values above/below a given threshold differently)
+
+
+## Supported Evaluation Metrics
+
+### Semantic Segmentation
+- `MeanIoU` (mean intersection over union)
+- `DiceCoefficient` (computes per channel Dice Coefficient and returns the average)
+If a 3D U-Net was trained to predict cell boundaries, one can use the following semantic instance segmentation metrics
+(the metrics below are computed by running connected components on thresholded boundary map and comparing the resulted instances to the ground truth instance segmentation): 
+- `BoundaryAveragePrecision` (Average Precision applied to the boundary probability maps: thresholds the output from the network, runs connected components to get the segmentation and computes AP between the resulting segmentation and the ground truth)
+- `AdaptedRandError` (see http://brainiac2.mit.edu/SNEMI3D/evaluation for a detailed explanation)
+- `AveragePrecision` (see https://www.kaggle.com/stkbailey/step-by-step-explanation-of-scoring-metric)
+
+If not specified `MeanIoU` will be used by default.
+
+
+### Regression
+- `PSNR` (peak signal to noise ratio)
+- `MSE` (mean squared error)
 
 ## Examples
 
