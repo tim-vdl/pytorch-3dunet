@@ -1,14 +1,8 @@
 import torch.nn as nn
 
-<<<<<<< HEAD
-from .buildingblocks import DoubleConv, ExtResNetBlock, create_encoders, \
-    create_decoders
-from .utils import number_of_features_per_level, get_class
-=======
 from pytorch3dunet.unet3d.buildingblocks import DoubleConv, ResNetBlock, ResNetBlockSE, \
     create_decoders, create_encoders
 from pytorch3dunet.unet3d.utils import get_class, number_of_features_per_level
->>>>>>> 5563a7a448f01f073568854499043d587892ff12
 
 
 class AbstractUNet(nn.Module):
@@ -98,15 +92,9 @@ class AbstractUNet(nn.Module):
 
         x = self.final_conv(x)
 
-<<<<<<< HEAD
-        # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs logits
-        #if not self.training and self.final_activation is not None:
-        if self.final_activation is not None:
-=======
         # apply final_activation (i.e. Sigmoid or Softmax) only during prediction.
         # During training the network outputs logits
         if not self.training and self.final_activation is not None:
->>>>>>> 5563a7a448f01f073568854499043d587892ff12
             x = self.final_activation(x)
 
         return x
