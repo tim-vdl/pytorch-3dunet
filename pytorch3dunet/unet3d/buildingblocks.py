@@ -315,7 +315,7 @@ class Decoder(nn.Module):
             else:
                 # if basic_module=ResNetBlock use transposed convolution upsampling and summation joining
                 self.upsampling = TransposeConvUpsampling(in_channels=in_channels, out_channels=out_channels,
-                                                          kernel_size=conv_kernel_size, scale_factor=scale_factor)
+                                                          kernel_size=conv_kernel_size, scale_factor=scale_factor, is3d=is3d)
                 # sum joining
                 self.joining = partial(self._joining, concat=False)
                 # adapt the number of in_channels for the ResNetBlock
@@ -449,10 +449,15 @@ class TransposeConvUpsampling(AbstractUpsampling):
 
     """
 
-    def __init__(self, in_channels=None, out_channels=None, kernel_size=3, scale_factor=(2, 2, 2)):
+    def __init__(self, in_channels=None, out_channels=None, kernel_size=3, scale_factor=2, is3d=True):
         # make sure that the output size reverses the MaxPool3d from the corresponding encoder
-        upsample = nn.ConvTranspose3d(in_channels, out_channels, kernel_size=kernel_size, stride=scale_factor,
-                                      padding=1)
+        if is3d:
+            upsample = nn.ConvTranspose3d(in_channels, out_channels, kernel_size=kernel_size, stride=scale_factor,
+                                        padding=1)
+        else:
+            scale_factor = (scale_factor[1], scale_factor[2])
+            upsample = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=scale_factor,
+                                        padding=1)
         super().__init__(upsample)
 
 
