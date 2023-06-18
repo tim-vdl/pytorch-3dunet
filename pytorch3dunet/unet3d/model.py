@@ -71,6 +71,8 @@ class AbstractUNet(nn.Module):
         else:
             # regression problem
             self.final_activation = None
+        
+        self.n_classes = out_channels
 
     def forward(self, x):
         # encoder part
