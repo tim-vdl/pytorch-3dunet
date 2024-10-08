@@ -123,6 +123,60 @@ class UNet3D(AbstractUNet):
                                      is3d=True)
 
 
+class SAUNet3D(Abstract3DUNet):
+    """
+    Self-Attention UNet model
+    """
+
+    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
+                 num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, **kwargs):
+        super(SAUNet3D, self).__init__(in_channels=in_channels,
+                                     out_channels=out_channels,
+                                     final_sigmoid=final_sigmoid,
+                                     basic_module=DoubleConv,
+                                     f_maps=f_maps,
+                                     layer_order=layer_order,
+                                     num_groups=num_groups,
+                                     num_levels=num_levels,
+                                     is_segmentation=is_segmentation,
+                                     conv_padding=conv_padding,
+                                     **kwargs)
+        
+        self.attention = SelfAttention(
+            in_channels=f_maps * 2**(num_levels-1),
+            out_channels=f_maps * 2**(num_levels-1),
+            )
+    
+    def forward(self, x):
+        # encoder part
+        encoders_features = []
+        for encoder in self.encoders:
+            x = encoder(x)
+            # reverse the encoder outputs to be aligned with the decoder
+            encoders_features.insert(0, x)
+
+        # remove the last encoder's output from the list
+        # !!remember: it's the 1st in the list
+        encoders_features = encoders_features[1:]
+
+        # Apply self-attention on last encoder's output
+        x = self.attention(x)
+
+        # decoder part
+        for decoder, encoder_features in zip(self.decoders, encoders_features):
+            # pass the output from the corresponding encoder and the output
+            # of the previous decoder
+            x = decoder(encoder_features, x)
+
+        x = self.final_conv(x)
+
+        # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs logits
+        if self.final_activation is not None:
+            x = self.final_activation(x)
+
+        return x
+
+
 class ResidualUNet3D(AbstractUNet):
     """
     Residual 3DUnet model implementation based on https://arxiv.org/pdf/1706.00120.pdf.

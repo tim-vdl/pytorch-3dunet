@@ -224,6 +224,54 @@ class ResNetBlockSE(ResNetBlock):
         return out
 
 
+class SelfAttention(nn.Module):
+    def __init__(self, in_channels, out_channels, dropout=0.5, momentum=0.9):
+        super(SelfAttention, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.dropout = dropout
+        self.momentum = momentum
+
+        self.query = nn.Conv3d(self.in_channels, self.out_channels, kernel_size=1)
+        self.key = nn.Conv3d(self.in_channels, self.out_channels, kernel_size=1)
+        self.value = nn.Conv3d(self.in_channels, self.out_channels, kernel_size=1)
+        
+        self.conv_out = nn.Conv3d(self.out_channels, self.out_channels, kernel_size=1)
+        self.relu = nn.ReLU(inplace=True)
+        self.batchnorm = nn.BatchNorm3d(self.out_channels, momentum=self.momentum)
+        self.dropout = nn.Dropout(self.dropout)
+
+    def forward(self, x):
+        B, _, D, H, W = x.shape
+
+        # Compute query, key, value
+        query = self.query(x)
+        key = self.key(x)
+        value = self.value(x)
+
+        # Reshape and transpose
+        query = query.view(B, self.out_channels, -1).permute(0, 2, 1)
+        key = key.view(B, self.out_channels, -1)
+        value = value.view(B, self.out_channels, -1).permute(0, 2, 1)
+
+        # Compute attention weights
+        attention_weights = F.softmax(torch.bmm(query, key), dim=2)
+        attention_weights = self.dropout(attention_weights)
+
+        # Apply attention weights to value
+        out = torch.bmm(attention_weights, value)
+
+        # Reshape output
+        out = out.permute(0, 2, 1).view(B, self.out_channels, D, H, W)
+
+        # Apply final convolution, ReLU, and batch normalization
+        out = self.conv_out(out)
+        out = self.relu(out)
+        out = self.batchnorm(out)
+
+        return out + x
+
+
 class Encoder(nn.Module):
     """
     A single module from the encoder path consisting of the optional max
